@@ -14,7 +14,7 @@ os.environ.update(
         "SECRET_KEY": "test-secret-key-that-is-long-enough-1234567890",
         "ADMIN_USERNAME": "admin",
         "ADMIN_PASSWORD_HASH": bcrypt.hashpw(TEST_PASSWORD.encode(), bcrypt.gensalt()).decode(),
-        "EXCEL_FILE_PATH": os.path.join(_TMP, "test_business_data.xlsx"),
+        "DATABASE_URL": f"sqlite:///{os.path.join(_TMP, 'test.db')}",
         "BACKUP_DIR": os.path.join(_TMP, "backups"),
         "GENERATED_BILLS_DIR": os.path.join(_TMP, "bills"),
     }

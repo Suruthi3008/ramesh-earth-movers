@@ -24,7 +24,9 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:5173"
 
-    EXCEL_FILE_PATH: Path = ROOT_DIR / "data" / "business_data.xlsx"
+    # SQLite file locally; set to a PostgreSQL URL in production
+    DATABASE_URL: str = f"sqlite:///{ROOT_DIR / 'data' / 'business.db'}"
+    EXCEL_FILE_PATH: Path = ROOT_DIR / "data" / "business_data.xlsx"  # used only by the import script
     BACKUP_DIR: Path = ROOT_DIR / "data" / "backups"
     BACKUP_KEEP: int = 30
     GENERATED_BILLS_DIR: Path = ROOT_DIR / "generated_bills"

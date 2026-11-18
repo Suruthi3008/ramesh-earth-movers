@@ -140,7 +140,7 @@ def paid_total_between(start: date, end: date) -> Decimal:
     """Paid Bata and Salary with a payment date in [start, end]."""
     total = ZERO
     for row in get_excel_service().list_rows(DRIVER_PAYMENTS):
-        if row.get("status", "Paid") != "Paid":
+        if (row.get("status") or "Paid") != "Paid":
             continue
         paid_on = date.fromisoformat(str(row.get("payment_date"))[:10])
         if start <= paid_on <= end:

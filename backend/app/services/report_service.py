@@ -117,7 +117,7 @@ def build_report(start: date, end: date, label: str) -> ReportOut:
             machine_totals[machine][bucket] += amount
 
     for row in excel.list_rows(DRIVER_PAYMENTS):
-        if row.get("status", "Paid") != "Paid" or not _within(row.get("payment_date"), start, end):
+        if (row.get("status") or "Paid") != "Paid" or not _within(row.get("payment_date"), start, end):
             continue
         if row.get("payment_type") == "Bata":
             expense["driver_bata"] += money(row.get("amount"))
