@@ -26,11 +26,11 @@ SHEETS: dict[str, list[str]] = {
     "Bills": [
         "bill_id", "bill_number", "bill_date", "customer_name", "customer_address",
         "project_name", "total_amount", "total_paid", "pending_amount", "status",
-        "created_at", "updated_at",
+        "created_at", "updated_at", "old_balance",
     ],
     "Bill_Items": [
         "item_id", "bill_id", "date", "work_type", "description", "quantity",
-        "unit", "rate", "bata", "amount",
+        "unit", "rate", "bata", "amount", "base",
     ],
     "Payments": [
         "payment_id", "bill_id", "bill_number", "customer_name", "payment_date",
@@ -64,7 +64,7 @@ ID_PREFIXES: dict[str, str] = {
 
 # Columns written as numbers in the downloaded Excel file (so Excel can sum them)
 NUMERIC_COLUMNS = {
-    "total_amount", "total_paid", "pending_amount", "amount", "quantity", "rate", "bata", "salary",
+    "total_amount", "total_paid", "pending_amount", "amount", "quantity", "rate", "base", "bata", "salary", "old_balance",
 }
 
 
@@ -107,6 +107,7 @@ class DataStore:
             columns = [Column(h, Text, primary_key=(i == 0)) for i, h in enumerate(headers)]
             self.tables[sheet] = Table(sheet.lower(), self.metadata, *columns)
         self.metadata.create_all(self.engine)
+        self._add_missing_columns()
         self._lock = threading.RLock()  # serialises writes (matters for SQLite)
         logger.info("Database ready")
 
@@ -126,6 +127,21 @@ class DataStore:
                 except ValueError:
                     continue
         return f"{prefix}-{highest + 1:05d}"
+
+    def _add_missing_columns(self) -> None:
+        """Add columns introduced by newer versions to tables that already exist."""
+        from sqlalchemy import inspect, text
+
+        inspector = inspect(self.engine)
+        with self.engine.begin() as conn:
+            for sheet, headers in SHEETS.items():
+                table = sheet.lower()
+                if not inspector.has_table(table):
+                    continue
+                existing = {c["name"] for c in inspector.get_columns(table)}
+                for header in headers:
+                    if header not in existing:
+                        conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{header}" TEXT'))
 
     # ---------------------------------------------------------- public API
 

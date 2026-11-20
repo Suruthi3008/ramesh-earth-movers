@@ -125,3 +125,99 @@ def test_excel_export_is_login_protected_and_valid(client):
     assert "attachment" in response.headers["content-disposition"]
     wb = load_workbook(io.BytesIO(response.content))
     assert "Bills" in wb.sheetnames and "Expenses" in wb.sheetnames
+
+
+def test_minimum_charge_day_rate_bata_and_advance(client):
+    headers = login(client)
+    today = date.today().isoformat()
+
+    def make_bill(items, advance=0):
+        return client.post("/api/bills", headers=headers, json={
+            "bill_date": today, "customer_name": "Minimum Test", "advance": advance, "items": items,
+        })
+
+    # 3 hours or less: minimum charge 4,500, default bata 500 → 5,000
+    small = make_bill([{"date": today, "work_type": "JCB Work", "quantity": 3, "unit": "hrs",
+                        "rate": 900, "bata": 500}])
+    assert small.status_code == 201, small.text
+    assert small.json()["total_amount"] == 5000
+    assert small.json()["items"][0]["base"] == 4500
+
+    # Above 3 hours: quantity × rate → 5.5 × 900 = 4,950
+    above = make_bill([{"date": today, "work_type": "JCB Work", "quantity": 5.5, "unit": "hrs",
+                        "rate": 900, "bata": 0}])
+    assert above.json()["total_amount"] == 4950
+
+    # One day at 8,000, bata cleared → 8,000
+    day = make_bill([{"date": today, "work_type": "JCB Work", "quantity": 1, "unit": "day",
+                      "rate": 8000, "bata": 0}])
+    assert day.json()["total_amount"] == 8000
+    assert day.json()["items"][0]["base"] == 8000
+
+    # Advance 2,000 → pending 6,000, status Partly Paid
+    with_advance = make_bill([{"date": today, "work_type": "JCB Work", "quantity": 1, "unit": "day",
+                               "rate": 8000, "bata": 0}], advance=2000)
+    body = with_advance.json()
+    assert body["advance"] == 2000
+    assert body["pending_amount"] == 6000
+    assert body["status"] == "Partly Paid"
+    bill_id = body["bill_id"]
+
+    # Advance cannot be more than the total
+    too_much = make_bill([{"date": today, "work_type": "JCB Work", "quantity": 1, "unit": "day",
+                           "rate": 8000, "bata": 0}], advance=9000)
+    assert too_much.status_code == 400
+
+    # Editing the advance to 0 makes the full amount pending again
+    items = [{"date": today, "work_type": "JCB Work", "quantity": 1, "unit": "day", "rate": 8000, "bata": 0}]
+    edited = client.put(f"/api/bills/{bill_id}", headers=headers, json={
+        "bill_date": today, "customer_name": "Minimum Test", "advance": 0, "items": items,
+    })
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["advance"] == 0
+    assert edited.json()["pending_amount"] == 8000
+
+    # PDF still generates with an advance and with an empty bata
+    pdf = client.get(f"/api/bills/{bill_id}/pdf", headers=headers)
+    assert pdf.status_code == 200 and pdf.content[:4] == b"%PDF"
+
+
+def test_old_balance_and_total_balance(client):
+    headers = login(client)
+    today = date.today().isoformat()
+    # Same numbers as the sample bill: 4,500 minimum + 7 days at 8,000 + 500 bata = 64,000
+    items = [{"date": today, "work_type": "JCB Work", "quantity": 2, "unit": "hrs", "rate": 900, "bata": 0}]
+    items += [{"date": today, "work_type": "JCB Work", "quantity": 1, "unit": "day", "rate": 8000, "bata": 500}
+              for _ in range(7)]
+
+    created = client.post("/api/bills", headers=headers, json={
+        "bill_date": today, "customer_name": "Balance Test", "advance": 27000, "old_balance": 2500,
+        "items": items,
+    })
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["total_amount"] == 64000
+    assert body["advance"] == 27000
+    assert body["old_balance"] == 2500
+    assert body["total_balance"] == 39500           # 64,000 + 2,500 - 27,000
+    assert body["pending_amount"] == 37000          # old balance is not added to this bill's pending
+    bill_id = body["bill_id"]
+
+    # No old balance: Total Balance = work total - advance
+    plain = client.post("/api/bills", headers=headers, json={
+        "bill_date": today, "customer_name": "Plain", "advance": 1000, "items": items,
+    }).json()
+    assert plain["old_balance"] == 0
+    assert plain["total_balance"] == 63000
+
+    # Editing the old balance recalculates Total Balance
+    edited = client.put(f"/api/bills/{bill_id}", headers=headers, json={
+        "bill_date": today, "customer_name": "Balance Test", "advance": 27000, "old_balance": 0,
+        "items": items,
+    }).json()
+    assert edited["old_balance"] == 0
+    assert edited["total_balance"] == 37000
+
+    pdf = client.get(f"/api/bills/{bill_id}/pdf", headers=headers)
+    assert pdf.status_code == 200 and pdf.content[:4] == b"%PDF"
+

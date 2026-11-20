@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Save } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import FormField from '../components/FormField';
+import TotalsSummary from '../components/TotalsSummary';
 import WorkItemCard from '../components/WorkItemCard';
 import { billsApi } from '../services/billsApi';
 import { settingsApi } from '../services/settingsApi';
@@ -39,7 +40,13 @@ export default function BillFormPage() {
       setLoadError('');
       try {
         const settings = await settingsApi.get();
-        const loadedDefaults = { jcbRate: settings.jcb_rate, defaultBata: settings.default_bata };
+        const loadedDefaults = {
+          jcbRate: settings.jcb_rate,
+          defaultBata: settings.default_bata,
+          dayRate: settings.day_rate,
+          minHoursPrice: settings.min_hours_price,
+          minHoursThreshold: settings.min_hours_threshold,
+        };
         const loadedForm = isEdit
           ? formFromBill(await billsApi.get(id))
           : newBillForm(loadedDefaults);
@@ -107,7 +114,7 @@ export default function BillFormPage() {
     event.preventDefault();
     setSubmitError('');
 
-    const found = validateBill(form);
+    const found = validateBill(form, defaults);
     setErrors(found);
     if (hasErrors(found)) {
       setSubmitError('Please fix the highlighted fields.');
@@ -131,7 +138,7 @@ export default function BillFormPage() {
     }
   }
 
-  const total = billTotal(form.items);
+  const total = billTotal(form.items, defaults);
 
   return (
     <section>
@@ -179,6 +186,7 @@ export default function BillFormPage() {
               onWorkTypeChange={(type) => changeWorkType(item.id, type)}
               onRemove={() => removeItem(item.id)}
               canRemove={form.items.length > 1}
+              cfg={defaults}
             />
           ))}
         </div>
@@ -190,10 +198,18 @@ export default function BillFormPage() {
           Add Another Work
         </button>
 
-        <div className="card total-card">
-          <span>Total Amount</span>
-          <strong>{formatINR(total)}</strong>
+        <div className="card" style={{ marginTop: 8 }}>
+          <FormField label="Advance (₹)" htmlFor="advance" error={errors.advance}>
+            <input id="advance" className="input" type="number" inputMode="decimal" step="any" min="0"
+              value={form.advance} onChange={(e) => updateField('advance', e.target.value)} />
+          </FormField>
+          <FormField label="Old Balance (₹)" htmlFor="old-balance" error={errors.oldBalance}>
+            <input id="old-balance" className="input" type="number" inputMode="decimal" step="any" min="0"
+              value={form.oldBalance} onChange={(e) => updateField('oldBalance', e.target.value)} />
+          </FormField>
         </div>
+
+        <TotalsSummary total={total} advance={Number(form.advance) || 0} oldBalance={Number(form.oldBalance) || 0} />
 
         <button type="submit" className="btn btn-primary save-bill-btn" disabled={saving}>
           <Save size={18} aria-hidden="true" />

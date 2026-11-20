@@ -12,12 +12,15 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "email": "rameshearthmovers19@gmail.com",
     "gstin": "33DDZPP6166H1ZS",
     "bank_account_name": "RAMESH EARTH MOVERS",
-    "bank_account_number": "129311500008305",
+    "bank_account_number": "1293115000008305",
     "bank_ifsc": "KVBL0001293",
     "bank_account_type": "Current",
     "gpay": "9944878713",
     "jcb_rate": "900",
     "default_bata": "500",
+    "min_hours_price": "4500",
+    "min_hours_threshold": "3",
+    "day_rate": "8000",
     "bill_number_prefix": "",
 }
 

@@ -74,6 +74,7 @@ def _styles(regular: str, bold: str) -> dict[str, ParagraphStyle]:
         "cell_center": ParagraphStyle("cell_center", fontName=regular, fontSize=9, leading=11, alignment=TA_CENTER),
         "cell_right": ParagraphStyle("cell_right", fontName=regular, fontSize=9, leading=11, alignment=TA_RIGHT),
         "total": ParagraphStyle("total", fontName=bold, fontSize=13, leading=16, alignment=TA_RIGHT, textColor=RED),
+        "total_line": ParagraphStyle("total_line", fontName=regular, fontSize=11, leading=14, alignment=TA_RIGHT, textColor=RED),
         "underline": ParagraphStyle("underline", fontName=regular, fontSize=12, leading=15),
         "sign": ParagraphStyle("sign", fontName=bold, fontSize=10, leading=13, textColor=RED),
         "footer": ParagraphStyle("footer", fontName=bold, fontSize=10, leading=12, alignment=TA_CENTER),
@@ -194,9 +195,12 @@ def _items_table(bill: BillOut, currency: str, s: dict[str, ParagraphStyle]) -> 
                 _para(index, s["cell_center"]),
                 _para(item.date.strftime("%d/%m/%Y"), s["cell_center"]),
                 _para(item.description, s["cell"]),
-                _para(f"{_quantity(item.quantity)} {item.unit}", s["cell_center"]),
-                _para(_amount(Decimal(str(item.quantity)) * Decimal(str(item.rate)), currency), s["cell_right"]),
-                _para(_amount(item.bata, currency), s["cell_right"]),
+                _para(
+                    item.quantity_display or f"{_quantity(item.quantity)} {item.unit}",
+                    s["cell_center"],
+                ),
+                _para(_amount(item.base, currency), s["cell_right"]),
+                _para(_amount(item.bata, currency) if item.bata else "-", s["cell_right"]),
                 _para(_amount(item.amount, currency), s["cell_right"]),
             ]
         )
@@ -221,16 +225,26 @@ def _items_table(bill: BillOut, currency: str, s: dict[str, ParagraphStyle]) -> 
 
 
 def _total(bill: BillOut, currency: str, s: dict[str, ParagraphStyle]) -> Table:
-    table = Table(
-        [[Paragraph(escape(f"Total = {_amount(bill.total_amount, currency)}"), s["total"])]],
-        colWidths=[USABLE_WIDTH],
-    )
+    """Summary box: Advance, Old Balance (only if given), then Total Balance = work total + old balance - advance."""
+    work_total = Decimal(str(bill.total_amount))
+    advance = Decimal(str(bill.advance or 0))
+    old_balance = Decimal(str(bill.old_balance or 0))
+    total_balance = work_total + old_balance - advance
+
+    lines = []
+    if advance > 0:
+        lines.append(Paragraph(escape(f"Advance = {_amount(advance, currency)}"), s["total_line"]))
+    if old_balance > 0:
+        lines.append(Paragraph(escape(f"Old Balance = {_amount(old_balance, currency)}"), s["total_line"]))
+    lines.append(Paragraph(escape(f"Total Balance = {_amount(total_balance, currency)}"), s["total"]))
+
+    table = Table([[line] for line in lines], colWidths=[USABLE_WIDTH])
     table.setStyle(
         TableStyle(
             [
                 ("GRID", (0, 0), (-1, -1), 0.6, LINE),
-                ("TOPPADDING", (0, 0), (-1, -1), 8),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
             ]
         )
     )

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Download, Pencil, Trash2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
+import TotalsSummary from '../components/TotalsSummary';
 import { billsApi } from '../services/billsApi';
 import { formatDate, formatINR } from '../utils/format';
 
@@ -122,10 +123,7 @@ export default function BillDetailPage() {
         ))}
       </div>
 
-      <div className="card total-card">
-        <span>Total Amount</span>
-        <strong>{formatINR(bill.total_amount)}</strong>
-      </div>
+      <TotalsSummary total={bill.total_amount} advance={bill.advance} oldBalance={bill.old_balance} />
       <div className="card" style={{ marginTop: 12 }}>
         <div className="row-line"><span>Received</span><strong>{formatINR(bill.total_paid)}</strong></div>
         <div className="row-line"><span>Pending</span><strong>{formatINR(bill.pending_amount)}</strong></div>

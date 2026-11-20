@@ -1,12 +1,20 @@
 import { Trash2 } from 'lucide-react';
 import FormField from './FormField';
-import { LORRY_MATERIALS, UNIT_OPTIONS, WORK_TYPES, lineAmount } from '../utils/billForm';
+import {
+  LORRY_MATERIALS,
+  UNIT_OPTIONS,
+  WORK_TYPES,
+  defaultRateFor,
+  lineAmount,
+  minimumApplies,
+} from '../utils/billForm';
 import { formatINR } from '../utils/format';
 
 /** One work item as a stacked card, so it works on a phone without a wide table. */
 export default function WorkItemCard({
   item,
   index,
+  cfg,
   errors = {},
   onChange,
   onWorkTypeChange,
@@ -15,6 +23,14 @@ export default function WorkItemCard({
 }) {
   const id = item.id;
   const isLorry = item.workType === 'Lorry Service';
+  const isJcb = item.workType === 'JCB Work';
+  const isTractor = item.workType === 'Tractor Service';
+
+  function changeUnit(unit) {
+    const patch = { unit };
+    if (isJcb) patch.rate = defaultRateFor('JCB Work', unit, cfg);
+    onChange(patch);
+  }
 
   return (
     <article className="card work-item">
@@ -63,16 +79,20 @@ export default function WorkItemCard({
       </div>
 
       <FormField label="Unit" htmlFor={`${id}-unit`} error={errors.unit}>
-        <select id={`${id}-unit`} className="input" value={item.unit}
-          onChange={(e) => onChange({ unit: e.target.value })}>
+        <select id={`${id}-unit`} className="input" value={item.unit} onChange={(e) => changeUnit(e.target.value)}>
           {(UNIT_OPTIONS[item.workType] || []).map((u) => <option key={u} value={u}>{u}</option>)}
         </select>
+        {minimumApplies(item, cfg) && (
+          <span className="field__hint">
+            Minimum charge applies: {formatINR(cfg.minHoursPrice)} (up to {cfg.minHoursThreshold} hrs)
+          </span>
+        )}
       </FormField>
 
       <div className="grid-2">
-        <FormField label="Rate (₹)" htmlFor={`${id}-rate`} error={errors.rate}>
+        <FormField label={isJcb ? 'Rate (₹ per unit)' : 'Rate (₹)'} htmlFor={`${id}-rate`} error={errors.rate}>
           <input id={`${id}-rate`} className="input" type="number" inputMode="decimal" step="any" min="0"
-            value={item.rate} placeholder={isLorry || item.workType === 'Tractor Service' ? 'Enter rate' : ''}
+            value={item.rate} placeholder={isLorry || isTractor ? 'Enter rate' : ''}
             onChange={(e) => onChange({ rate: e.target.value })} />
         </FormField>
 
@@ -84,7 +104,7 @@ export default function WorkItemCard({
 
       <div className="work-item__amount">
         <span>Amount</span>
-        <strong>{formatINR(lineAmount(item))}</strong>
+        <strong>{formatINR(lineAmount(item, cfg))}</strong>
       </div>
     </article>
   );

@@ -1,4 +1,4 @@
-/** Bill form helpers: line math, validation and conversion to/from the API shape. */
+/** Bill form helpers: line math (incl. minimum charge), validation and conversion to/from the API shape. */
 import { todayISO } from './format';
 
 export const WORK_TYPES = ['JCB Work', 'Lorry Service', 'Tractor Service', 'Other Work'];
@@ -8,7 +8,7 @@ export const LORRY_MATERIALS = [
 ];
 
 export const UNIT_OPTIONS = {
-  'JCB Work': ['hrs'],
+  'JCB Work': ['hrs', 'day'],
   'Lorry Service': ['Ton', 'Unit', 'CFT', 'Load'],
   'Tractor Service': ['Hours', 'Trip', 'Load'],
   'Other Work': ['job'],
@@ -24,24 +24,47 @@ export const UNITS = {
 
 const round2 = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
-/** Mirrors backend calculations.line_amount: quantity × rate + bata. */
-export function lineAmount(item) {
-  return round2((Number(item.quantity) || 0) * (Number(item.rate) || 0) + (Number(item.bata) || 0));
+/**
+ * cfg (from Settings): jcbRate, dayRate, defaultBata, minHoursPrice, minHoursThreshold.
+ * Backend is the source of truth; these functions only show the same numbers while typing.
+ */
+
+/** JCB hours at or below the threshold cost the minimum charge. */
+export function minimumApplies(item, cfg) {
+  return (
+    item.workType === 'JCB Work' &&
+    item.unit !== 'day' &&
+    Number(item.quantity) > 0 &&
+    Number(item.quantity) <= Number(cfg?.minHoursThreshold)
+  );
 }
 
-export function billTotal(items) {
-  return round2(items.reduce((sum, item) => sum + lineAmount(item), 0));
+/** Base charge before bata: minimum charge, or quantity × rate. */
+export function lineBase(item, cfg) {
+  if (minimumApplies(item, cfg)) return round2(cfg.minHoursPrice);
+  return round2((Number(item.quantity) || 0) * (Number(item.rate) || 0));
+}
+
+/** Mirrors backend: base + bata. Safe to call without cfg (Daily Work preview). */
+export function lineAmount(item, cfg) {
+  return round2(lineBase(item, cfg) + (Number(item.bata) || 0));
+}
+
+export function billTotal(items, cfg) {
+  return round2(items.reduce((sum, item) => sum + lineAmount(item, cfg), 0));
+}
+
+/** Rate that a JCB unit starts with: per hour, or per day. Other types are entered by hand. */
+export function defaultRateFor(workType, unit, cfg) {
+  if (workType !== 'JCB Work') return '';
+  return unit === 'day' ? (cfg?.dayRate ?? '') : (cfg?.jcbRate ?? '');
 }
 
 let sequence = 0;
 // crypto.randomUUID is unavailable on plain http:// LAN addresses, so use a counter
 const nextId = () => `item-${Date.now()}-${sequence++}`;
 
-/**
- * Rate and bata default only for JCB Work (from Settings).
- * Lorry and Tractor rates are entered by hand, so they start empty.
- */
-export function newWorkItem(defaults, date) {
+export function newWorkItem(cfg, date) {
   return {
     id: nextId(),
     date,
@@ -50,31 +73,33 @@ export function newWorkItem(defaults, date) {
     description: '',
     unit: UNITS['JCB Work'],
     quantity: '',
-    rate: defaults.jcbRate ?? '',
-    bata: defaults.defaultBata ?? '',
+    rate: cfg.jcbRate ?? '',
+    bata: cfg.defaultBata ?? '',
   };
 }
 
-export function applyWorkType(item, workType, defaults) {
+export function applyWorkType(item, workType, cfg) {
   const isJcb = workType === 'JCB Work';
   return {
     ...item,
     workType,
     material: '',
     unit: UNITS[workType],
-    rate: isJcb ? (defaults.jcbRate ?? '') : '',
-    bata: isJcb ? (defaults.defaultBata ?? '') : '',
+    rate: isJcb ? defaultRateFor(workType, UNITS[workType], cfg) : '',
+    bata: isJcb ? (cfg.defaultBata ?? '') : '',
   };
 }
 
-export function newBillForm(defaults) {
+export function newBillForm(cfg) {
   const today = todayISO();
   return {
     billDate: today,
     customerName: '',
     customerAddress: '',
     projectName: '',
-    items: [newWorkItem(defaults, today)],
+    advance: '',
+    oldBalance: '',
+    items: [newWorkItem(cfg, today)],
   };
 }
 
@@ -84,6 +109,8 @@ export function formFromBill(bill) {
     customerName: bill.customer_name,
     customerAddress: bill.customer_address || '',
     projectName: bill.project_name || '',
+    advance: bill.advance ? String(bill.advance) : '',
+    oldBalance: bill.old_balance ? String(bill.old_balance) : '',
     items: bill.items.map((item) => ({
       id: `saved-${item.item_id}`,
       date: item.date,
@@ -98,7 +125,7 @@ export function formFromBill(bill) {
   };
 }
 
-export function validateBill(form) {
+export function validateBill(form, cfg) {
   const errors = {};
   if (!form.billDate) errors.billDate = 'Bill date is required.';
   if (!form.customerName.trim()) errors.customerName = 'Customer name is required.';
@@ -123,9 +150,14 @@ export function validateBill(form) {
   });
 
   if (itemErrors.some((found) => Object.keys(found).length > 0)) errors.itemErrors = itemErrors;
-  if (!errors.items && billTotal(form.items) <= 0) {
-    errors.items = 'The bill total must be more than zero.';
-  }
+  const total = billTotal(form.items, cfg);
+  if (!errors.items && total <= 0) errors.items = 'The bill total must be more than zero.';
+
+  const advance = Number(form.advance) || 0;
+  const oldBalance = Number(form.oldBalance) || 0;
+  if (advance < 0) errors.advance = 'Advance cannot be negative.';
+  else if (advance > total) errors.advance = 'Advance cannot be more than the total.';
+  if (oldBalance < 0) errors.oldBalance = 'Old balance cannot be negative.';
   return errors;
 }
 
@@ -139,6 +171,8 @@ export function toPayload(form) {
     customer_name: form.customerName.trim(),
     customer_address: form.customerAddress.trim(),
     project_name: form.projectName.trim(),
+    advance: Number(form.advance) || 0,
+    old_balance: Number(form.oldBalance) || 0,
     items: form.items.map((item) => ({
       date: item.date,
       work_type: item.workType,

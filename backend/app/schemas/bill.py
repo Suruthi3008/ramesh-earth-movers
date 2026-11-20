@@ -14,7 +14,7 @@ LORRY_UNITS: list[str] = ["Ton", "Unit", "CFT", "Load"]
 TRACTOR_UNITS: list[str] = ["Hours", "Trip", "Load"]
 
 UNIT_OPTIONS: dict[str, list[str]] = {
-    "JCB Work": ["hrs"],
+    "JCB Work": ["hrs", "day"],
     "Lorry Service": LORRY_UNITS,
     "Tractor Service": TRACTOR_UNITS,
     "Other Work": ["job"],
@@ -53,6 +53,8 @@ class BillIn(BaseModel):
     customer_name: str = Field(..., min_length=1, max_length=120)
     customer_address: str = Field("", max_length=300)
     project_name: str = Field("", max_length=120)
+    advance: Decimal = Field(Decimal("0"), ge=0, le=100_000_000)
+    old_balance: Decimal = Field(Decimal("0"), ge=0, le=100_000_000)
     items: list[WorkItemIn] = Field(..., min_length=1, max_length=50)
 
     @field_validator("customer_name")
@@ -70,8 +72,10 @@ class WorkItemOut(BaseModel):
     work_type: str
     description: str
     quantity: float
+    quantity_display: str = ""
     unit: str
     rate: float
+    base: float = 0  # quantity × rate, or the minimum charge
     bata: float
     amount: float
 
@@ -90,6 +94,9 @@ class BillSummary(BaseModel):
 
 class BillOut(BillSummary):
     customer_address: str = ""
+    advance: float = 0
+    old_balance: float = 0
+    total_balance: float = 0  # work total + old balance - advance
     items: list[WorkItemOut]
     created_at: str = ""
     updated_at: str = ""

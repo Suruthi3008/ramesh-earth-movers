@@ -31,12 +31,15 @@ const SECTIONS = [
     fields: [
       { key: 'jcb_rate', label: 'JCB Rate per Hour (₹)', inputMode: 'decimal', number: true },
       { key: 'default_bata', label: 'Default Bata (₹)', inputMode: 'decimal', number: true },
+      { key: 'day_rate', label: 'JCB Rate per Day (₹)', inputMode: 'decimal', number: true },
+      { key: 'min_hours_price', label: 'Minimum Charge (₹)', inputMode: 'decimal', number: true },
+      { key: 'min_hours_threshold', label: 'Minimum Charge applies up to (hrs)', inputMode: 'decimal', number: true },
       { key: 'bill_number_prefix', label: 'Bill Number Prefix', maxLength: 10, hint: 'Leave blank for 01, 02, …' },
     ],
   },
 ];
 
-const NUMBER_KEYS = ['jcb_rate', 'default_bata'];
+const NUMBER_KEYS = ['jcb_rate', 'default_bata', 'day_rate', 'min_hours_price', 'min_hours_threshold'];
 
 export default function SettingsPage() {
   const [form, setForm] = useState(null);

@@ -20,4 +20,7 @@ class SettingsIn(BaseModel):
 
     jcb_rate: Decimal = Field(..., ge=0, le=1_000_000)
     default_bata: Decimal = Field(..., ge=0, le=1_000_000)
+    min_hours_price: Decimal = Field(..., ge=0, le=1_000_000)
+    min_hours_threshold: Decimal = Field(..., ge=0, le=100)
+    day_rate: Decimal = Field(..., ge=0, le=1_000_000)
     bill_number_prefix: str = Field("", max_length=10, pattern=r"^[A-Za-z0-9-]*$")
